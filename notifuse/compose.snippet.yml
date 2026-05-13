@@ -1,0 +1,63 @@
+# Snippet docker-compose Notifuse Veridian
+# A reporter dans infra/docker-compose.prod.yml et infra/docker-compose.staging.yml
+
+# Postgres dedie Notifuse (boite noire upstream)
+notifuse-postgres:
+  image: postgres:17-alpine
+  container_name: notifuse-postgres
+  restart: unless-stopped
+  environment:
+    POSTGRES_USER: postgres
+    POSTGRES_PASSWORD: ${NOTIFUSE_DB_PASSWORD}
+    POSTGRES_DB: notifuse_system
+  volumes:
+    - notifuse-db-data:/var/lib/postgresql/data
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U postgres"]
+    interval: 10s
+    timeout: 5s
+    retries: 5
+
+# Notifuse Veridian (image custom, pas upstream)
+# Tag : saas-vX.Y.Z (SemVer Veridian, voir notifuse/RELEASE.md).
+# Bump manuel : `git tag saas-vX.Y.Z` sur le fork → workflow build l'image.
+# Update prod : editer ce tag dans le compose Dokploy + redeploy.
+notifuse:
+  image: ghcr.io/christ-roy/notifuse-veridian:saas-v1.0.0
+  container_name: notifuse-api
+  restart: unless-stopped
+  depends_on:
+    notifuse-postgres:
+      condition: service_healthy
+  environment:
+    # Upstream
+    DB_HOST: notifuse-postgres
+    DB_PORT: 5432
+    DB_USER: postgres
+    DB_PASSWORD: ${NOTIFUSE_DB_PASSWORD}
+    DB_PREFIX: notifuse
+    DB_NAME: notifuse_system
+    DB_SSLMODE: disable
+    SECRET_KEY: ${NOTIFUSE_SECRET_KEY}
+    ROOT_EMAIL: ${NOTIFUSE_ROOT_EMAIL}
+    API_ENDPOINT: https://notifuse.app.veridian.site
+    PORT: "8080"
+    # Veridian
+    HUB_API_SECRET: ${NOTIFUSE_HUB_API_SECRET}
+    HUB_WEBHOOK_URL: https://app.veridian.site/api/webhooks/notifuse
+    HUB_WEBHOOK_SECRET: ${NOTIFUSE_HUB_WEBHOOK_SECRET}
+    VERIDIAN_DEFAULT_PLAN: free
+  volumes:
+    - notifuse-data:/app/data
+  healthcheck:
+    test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/health"]
+    interval: 30s
+    timeout: 5s
+    retries: 3
+  labels:
+    - "traefik.enable=true"
+    - "traefik.http.routers.notifuse.rule=Host(`notifuse.app.veridian.site`)"
+    - "traefik.http.routers.notifuse.entrypoints=websecure"
+    - "traefik.http.routers.notifuse.tls=true"
+    - "traefik.http.routers.notifuse.tls.certresolver=letsencrypt"
+    - "traefik.http.services.notifuse.loadbalancer.server.port=8080"
