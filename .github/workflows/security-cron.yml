@@ -1,0 +1,42 @@
+name: Security cron — Trivy daily on deployed image
+
+# Cron quotidien Trivy sur l'image Notifuse deployed (tag saas-v* du fork Veridian).
+# Détecte les CVE upstream sorties APRÈS le merge (entre 2 releases fork).
+# Si CRIT/HIGH apparaît : ce workflow fail, ouvrir une issue sur
+# Christ-Roy/notifuse-veridian pour bumper la base image, puis bump le tag
+# dans le compose (Dokploy ENV ou PR).
+#
+# L'image est buildée par Christ-Roy/notifuse-veridian (workflow veridian-ci.yml,
+# branche veridian). Ce cron scanne uniquement l'image deployed — il ne build rien.
+
+on:
+  schedule:
+    - cron: '17 3 * * *'   # 3h17 UTC = 4h17/5h17 Paris (décalé du hub à 3h00)
+  workflow_dispatch:
+    inputs:
+      image-tag:
+        description: "Tag à scanner (override, défaut = saas-v1.0.3 = production active)"
+        required: false
+        default: 'saas-v1.0.3'
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  trivy-scan:
+    name: Trivy scan deployed image (CRIT/HIGH bloquant)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: 'ghcr.io/christ-roy/notifuse-veridian:${{ github.event.inputs.image-tag || ''saas-v1.0.3'' }}'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+          ignore-unfixed: true
+          format: 'table'
+          vuln-type: 'os,library'
+          timeout: '10m'
+        env:
+          TRIVY_CACHE_DIR: /tmp/trivy-cache

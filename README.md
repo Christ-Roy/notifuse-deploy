@@ -1,2 +1,78 @@
 # notifuse-deploy
-Notifuse Veridian — Dokploy GitOps deploy repo (compose + runbook + CI security). Image upstream: christ-roy/notifuse-veridian.
+
+> Repo de déploiement GitOps pour la stack Notifuse Veridian.
+> Extrait du monorepo `Christ-Roy/veridian-platform` le 2026-05-13.
+
+## Ce que contient ce repo
+
+Ce repo **ne contient PAS de code applicatif**. Il contient uniquement l'infrastructure de déploiement de Notifuse en production :
+
+| Fichier | Rôle |
+|---|---|
+| `docker-compose.yml` | Compose source de vérité pour Dokploy (GitOps). Pin SHA-digest, DEPLOY_ENV-aware pour blue-green. |
+| `.env.example` | Liste des variables d'env attendues par la stack (sans valeurs — secrets dans Dokploy UI). |
+| `runbooks/deploy.md` | Runbook complet : redeploy, bump image, rollback, smoke, secrets. |
+| `.github/workflows/security-cron.yml` | Cron Trivy quotidien sur l'image deployed (détecte CVE upstream). |
+
+## Source du code applicatif
+
+L'image Docker `ghcr.io/christ-roy/notifuse-veridian:saas-vX.Y.Z` est buildée par le **fork** :
+- Repo : <https://github.com/Christ-Roy/notifuse-veridian>
+- Branche : `veridian` (tous les patches Veridian — pilotage HMAC depuis Hub, paywall Go natif, magic link cross-app, webhooks sortants)
+- Workflow build : `.github/workflows/veridian-ci.yml` sur le runner self-hosted du dev server
+
+## Auto-deploy Dokploy
+
+Dokploy (`compose-transmit-open-source-microchip-k9lvap`) pointe sur ce repo en mode Git provider :
+
+| Champ | Valeur |
+|---|---|
+| Provider | Git |
+| Repository | `https://github.com/Christ-Roy/notifuse-deploy.git` |
+| Branch | `main` |
+| Compose path | `./docker-compose.yml` |
+| Auto Deploy | ✅ webhook GitHub |
+
+Chaque push sur `main` qui touche `docker-compose.yml` → webhook → redeploy zero-downtime.
+
+## Comment ça s'utilise
+
+### Cas standard — modifier le compose
+
+```bash
+git checkout -b chore/<sujet>
+# ... edit docker-compose.yml ...
+git push -u origin chore/<sujet>
+gh pr create --fill
+gh pr merge --squash
+# Le webhook GitHub déclenche Dokploy → docker compose up zero-downtime
+```
+
+### Cas — bump image Notifuse (release fork upstream)
+
+Deux options :
+
+**Rapide (sans PR)** : Dokploy UI → Stack notifuse-prod → Environment → modifier `NOTIFUSE_IMAGE_TAG` + `NOTIFUSE_IMAGE_DIGEST` → Redeploy.
+
+**Auditable (PR)** : modifier les valeurs par défaut dans `docker-compose.yml` + `.env.example`, ouvrir une PR.
+
+### Rollback
+
+```bash
+git revert -m 1 <merge-commit-sha>
+git push origin main
+# Webhook GitHub → Dokploy redéploie l'état précédent
+```
+
+## Historique
+
+- **2026-05-13** : Migration GitOps initiale réalisée dans le monorepo `Christ-Roy/veridian-platform` (PR #89, #95, #96, #97, #98), puis **extrait dans ce repo standalone** suite à la décision de séparer chaque app en son propre repo deploy.
+
+  Pendant la transition, le compose reste également dans le monorepo (`infra/services/notifuse/`) comme **fallback** — il sera supprimé du monorepo à terme une fois ce repo validé en prod sur 7+ jours.
+
+## Sécurité
+
+- Aucun secret en clair dans ce repo (uniquement des `${VAR}` interpolés depuis le `.env` Dokploy)
+- L'env Dokploy de cette stack est l'env partagé `KmNwdMqLi9ye4xZ57WsnC` (SaaS Veridian / production) — il contient les ENV de toutes les autres apps (Stripe, Supabase, Twenty…)
+- Trivy cron quotidien 3h17 UTC scanne l'image deployed
+- Cf `runbooks/deploy.md` pour les détails sécurité et la procédure de rotation des secrets
