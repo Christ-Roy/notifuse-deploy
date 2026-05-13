@@ -63,7 +63,7 @@ services:
       SMTP_FROM_EMAIL: ${SMTP_ADMIN_EMAIL}
       SMTP_FROM_NAME: ${SMTP_SENDER_NAME}
       API_ENDPOINT: https://notifuse.${DOMAIN}
-      # === Veridian patch (fork) — bascule GitOps validée 2026-05-13 ===
+      # === Veridian patch (fork) — webhook test repo standalone 2026-05-13 ===
       # Évite le round-trip Cloudflare pour le scheduler interne (cron tasks.execute)
       # qui se self-appelait via l'URL publique → 480k req/jour inutiles.
       # Voir todo/dette-technique/002. Effectif quand l'image fork supporte la var
