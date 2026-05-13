@@ -5,7 +5,7 @@
 
 ## Ce que contient ce repo
 
-Ce repo **ne contient PAS de code applicatif**. Il contient uniquement l'infrastructure de déploiement de Notifuse en production :
+Ce repo **ne contient PAS de code applicatif**. Il contient uniquement l'infrastructure de déploiement de Notifuse en production + le tracking du fork upstream :
 
 | Fichier | Rôle |
 |---|---|
@@ -13,6 +13,9 @@ Ce repo **ne contient PAS de code applicatif**. Il contient uniquement l'infrast
 | `.env.example` | Liste des variables d'env attendues par la stack (sans valeurs — secrets dans Dokploy UI). |
 | `runbooks/deploy.md` | Runbook complet : redeploy, bump image, rollback, smoke, secrets. |
 | `.github/workflows/security-cron.yml` | Cron Trivy quotidien sur l'image deployed (détecte CVE upstream). |
+| `notifuse/` | Scaffold fork upstream : `README.md` (overview saasification), `RELEASE.md` (convention `saas-vX.Y.Z`), `MERGING-UPSTREAM.md` (procédure rebase), `.upstream-version` (version Notifuse trackée), `DEPLOY-STAGING.md`, `env.example`, `compose.snippet.yml`. |
+| `todo/TODO.md` | Chantiers Notifuse, follow-ups identifiés, recently shipped. |
+| `todo/UI-REVIEW.md` | File d'attente UI polish solo. |
 
 ## Source du code applicatif
 
@@ -66,9 +69,14 @@ git push origin main
 
 ## Historique
 
-- **2026-05-13** : Migration GitOps initiale réalisée dans le monorepo `Christ-Roy/veridian-platform` (PR #89, #95, #96, #97, #98), puis **extrait dans ce repo standalone** suite à la décision de séparer chaque app en son propre repo deploy.
+- **2026-05-13** : Migration GitOps initiale réalisée dans le monorepo `Christ-Roy/veridian-platform` (PR #89, #95, #96, #97, #98, #100), puis **extrait dans ce repo standalone** suite à la décision de séparer chaque app en son propre repo deploy. Migration scaffold fork + TODO ajoutée le même jour (commit `6e9e993`). Worktree monorepo `~/Bureau/veridian-platform-notifuse/` supprimé, nouveau worktree de travail : `~/Bureau/notifuse-deploy/`.
 
-  Pendant la transition, le compose reste également dans le monorepo (`infra/services/notifuse/`) comme **fallback** — il sera supprimé du monorepo à terme une fois ce repo validé en prod sur 7+ jours.
+  Pendant la transition, le compose, runbook, scaffold et TODO restent également dans le monorepo (`infra/services/notifuse/`, `runbooks/services/notifuse/`, `notifuse/`, `todo/apps/notifuse/`) comme **fallback** — ils seront supprimés du monorepo à partir du 2026-05-20 (7+ jours de prod stable sur ce repo).
+
+  Découvertes documentées pendant la migration (cf `todo/TODO.md` follow-ups) :
+  1. Manifest digest registry vs `.Image` local (Docker veut le digest publié sur le registry, pas l'image ID local renvoyé par `docker inspect <container>`)
+  2. Piège Dokploy Domains : tant qu'un Domain est configuré dans l'UI, Dokploy injecte ses propres labels Traefik en parallèle de ceux du compose Git → dual-router. Fix : `POST /api/domain.delete`
+  3. Tag `aquasecurity/trivy-action@v0.36.0` nécessite le préfixe `v` (le tag `0.36.0` sans `v` n'existe pas → fail "action not found")
 
 ## Sécurité
 

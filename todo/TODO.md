@@ -1,18 +1,24 @@
 # Notifuse — TODO detaille
 
-> Source de verite strategique : [`../../TODO-LIVE.md`](../../TODO-LIVE.md)
+> Source de verite strategique : repo standalone `Christ-Roy/notifuse-deploy`
+> (extrait du monorepo `Christ-Roy/veridian-platform` le 2026-05-13).
 > UI polish solo : [`UI-REVIEW.md`](./UI-REVIEW.md)
 >
 > Fork leger de Notifuse OSS pour le rendre SaaS-ready. Boite noire API-only,
 > pilotee par le Hub via HMAC. Stack : Go (upstream + patches Veridian).
 
-## Etat actuel (2026-05-08)
+## Etat actuel (2026-05-13)
 
-- **Fork** : `Christ-Roy/notifuse-veridian` — branche `veridian` depuis `v30.1`
-- **Dossier monorepo** : `notifuse/` — README, MERGING-UPSTREAM, env.example, compose.snippet, DEPLOY-STAGING
-- **URL prod** : https://notifuse.app.veridian.site → **toujours `notifuse/notifuse:v27.0` upstream brute** (pas notre fork — pas encore bumpe)
-- **URL staging** : https://saas-notifuse.staging.veridian.site → **`ghcr.io/christ-roy/notifuse-veridian:latest`** (fork avec patches actifs)
-- **Sante** : 🟢 staging (sprint saasification valide e2e), 🟡 prod (image upstream v27, fonctionnelle mais sans paywall)
+- **Fork (code applicatif)** : `Christ-Roy/notifuse-veridian` — branche `veridian` depuis `v30.1`
+- **Repo deploy (GitOps)** : `Christ-Roy/notifuse-deploy` — compose + runbook + CI security cron
+- **Worktree local** : `~/Bureau/notifuse-deploy/` (le worktree monorepo `veridian-platform-notifuse` a ete supprime 2026-05-13)
+- **URL prod** : https://notifuse.app.veridian.site → **`ghcr.io/christ-roy/notifuse-veridian:saas-v1.0.3`** (fork avec patches actifs depuis 2026-05-10, paywall + HMAC actifs)
+- **Container prod** : `compose-transmit-open-source-microchip-k9lvap-notifuse-prod-1`
+- **Compose ID Dokploy** : `WN0jglLj5bDIrXUFZHNmw` (sourceType: git, customGitUrl: notifuse-deploy.git, branch: main)
+- **URL staging** : https://saas-notifuse.staging.veridian.site → `ghcr.io/christ-roy/notifuse-veridian:latest`
+- **Sante** : 🟢 prod (saas-v1.0.3 actif, scheduler ~4-5 tasks/sec, 61 workspaces, 0 erreur log) / 🟢 staging
+- **Webhook GitHub auto-deploy** : id 622844391 sur `notifuse-deploy` (delete sur `veridian-platform` 2026-05-13 14:30)
+- **Fallback monorepo** : `veridian-platform/infra/services/notifuse/`, `runbooks/services/notifuse/`, `todo/apps/notifuse/`, `notifuse/`, workflows — conserves jusqu'a validation 7+ jours (suppression vise vers 2026-05-20)
 
 ## Sprint TERMINE — P1.3 Notifuse fork boite noire (2026-05-08)
 
@@ -343,13 +349,51 @@ Conflits courants documentes au fil de l'eau dans MERGING-UPSTREAM.md.
 
 ## Notes agents (chantiers en cours)
 
-_(sprint P1.3 termine — pas de chantier actif Notifuse cote fork)_
+_(sprint P1.3 termine — pas de chantier actif cote fork applicatif)_
 
-Prochaines actions = bump prod via blue/green (decision Robert), puis pas
-de patches Go avant le prochain rebase upstream (suivre tags stables `vX.Y`).
+### Follow-ups identifies 2026-05-13 (extraction GitOps)
+
+- [ ] **Headers securite** : `obs check security` rapporte 6 headers manquants
+  sur `notifuse.app.veridian.site` (HSTS, x-frame-options, x-content-type-options,
+  referrer-policy, +2). Config Notifuse upstream, **pas un probleme de la
+  migration GitOps**. A patcher cote fork `christ-roy/notifuse-veridian` (PR sur
+  branche `veridian` qui ajoute middleware headers ou Traefik labels override).
+- [ ] **CORS `*` + Credentials: true** : aussi `obs check security` CRIT, meme
+  source (Notifuse upstream). Memes notes.
+- [ ] **Cleanup monorepo** : a partir du 2026-05-20 (7 jours apres extraction
+  validee 2026-05-13), supprimer du monorepo `veridian-platform` :
+  - `infra/services/notifuse/`
+  - `runbooks/services/notifuse/`
+  - `todo/apps/notifuse/`
+  - `notifuse/` (scaffold)
+  - `.github/workflows/notifuse-ci.yml`
+  - `.github/workflows/notifuse-security-cron.yml`
+  - Ouvrir PR `chore/monorepo-remove-notifuse` sur `veridian-platform` similaire
+    a `chore/monorepo-remove-prospection` deja en cours
+- [ ] **Bug `_trivy-image.yml`** (cote monorepo `veridian-platform`) : tag
+  `aquasecurity/trivy-action@0.36.0` invalide (le bon = `v0.36.0` avec prefixe).
+  Casse `hub-security-cron`, `prospection-security-cve`, et l'ancien
+  `notifuse-security-cron` du monorepo. Notre nouveau cron sur `notifuse-deploy`
+  utilise directement `@v0.36.0` (correct) donc on est OK ici. Cross-app issue,
+  hors scope deploy notifuse.
+- [ ] **Tag `:latest` upstream** : Dokploy ENV pourrait avoir
+  `NOTIFUSE_IMAGE_TAG=saas-v1.0.3` (releases SemVer Veridian). Confirmer
+  qu'aucune drift par rapport au compose Git (envoyer un push qui modifie
+  juste un commentaire → si Dokploy redeploy avec un tag different, c'est
+  qu'un override ENV est en place).
 
 ## Recently shipped
 
+- **2026-05-13** : **Extraction Notifuse hors monorepo** vers repo standalone
+  `Christ-Roy/notifuse-deploy`. Stack Dokploy bascule de `sourceType: raw`
+  (compose colle dans l'UI) vers `sourceType: git` pointant sur le nouveau repo.
+  Webhook GitHub migre, fallback monorepo conserve 7 jours. Validation prod
+  fonctionnelle complete (scheduler 4-5 tasks/sec, 61 workspaces, 0 erreur).
+  Decouvertes documentees : (1) manifest digest registry vs `.Image` local,
+  (2) piege Dokploy Domains (injection labels Traefik en parallele = dual-router,
+  fix via `domain.delete` API), (3) tag `aquasecurity/trivy-action@v0.36.0`
+  necessite le prefixe `v`. Sequence PR monorepo : #89 #91 #95 #96 #97 #98
+  #100 ; PR notifuse-deploy : #1.
 - **2026-05-08** : Sprint P1.3 Notifuse-saasification complet. Fork v30.1, 7 endpoints HMAC + auto-login + admin wipe, paywall middleware, webhook emitter, 49 tests Go, e2e CI green, pipeline staging validee. Voir `session_2026-05-08_notifuse_saasification.md` memory.
 - **2026-05-08** : Endpoint admin `/api/veridian/admin/wipe-test-tenants` (HMAC) pour cleanup CI propre — remplace les SQL directs DROP DATABASE par appels API + safety_client_prefixes.
 - **2026-05-08** : Auto-login URL self-contained (`/veridian/auto-login?token=...`) → click bouton Hub = user logge direct dans console Notifuse comme owner, sans saisie code email. Page HTML inline localStorage + redirect SPA.
